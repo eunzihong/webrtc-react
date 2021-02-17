@@ -13,7 +13,7 @@ import React, {useState, useEffect, useRef} from "react";
 *       2-5. B: accept the offer and send back answer message
 *       2-6. A & B: set remote description => try peer-connection
 *
-* step 3. Connecting: peer-connect
+* step 3. Connecting: peer-connect completion
 *
 * step 4. Communication: the communication progresses
 *       4-1. send my media data
@@ -21,14 +21,13 @@ import React, {useState, useEffect, useRef} from "react";
 * */
 
 function WebrtcVideo(props) {
-    let peerConnection;
-    const localStream = useRef(null);   // for my video stream
+    // let peerConnection;
+    let pc1, pc2;
+    const localStream = useRef(null);
+    const remoteStream = useRef(null);
 
     useEffect(()=>{
-        getPeerConnection()
-            .then(() => {
-                getMedia().then(()=>console.log(peerConnection));
-            });
+        getPeerConnection().then();
 
     },[]);
 
@@ -40,7 +39,7 @@ function WebrtcVideo(props) {
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+            stream.getTracks().forEach(track => pc1.addTrack(track, stream));
             localStream.current.srcObject = stream;
 
         } catch (error) {
@@ -50,12 +49,61 @@ function WebrtcVideo(props) {
     }
 
     const getPeerConnection = async () => {
-        const configuration = {};
+        const configuration = {
+            iceServers: [{
+                urls: "stun:stun.l.google.com:19302"
+            }]
+        };
 
         try {
-            const pc = await new RTCPeerConnection(configuration);
+            pc1 = await new RTCPeerConnection(configuration);
+            pc2 = await new RTCPeerConnection(configuration);
 
-            peerConnection = pc;
+            await getMedia().then();
+
+            pc1.onicecandidate = (event) => {
+                if (event.candidate) {
+                    pc2.addIceCandidate(event.candidate);
+                    console.log('**** pc2 got event candidate', event.candidate);
+                } else {
+                    console.log('let me go home...');
+                }
+            }
+
+            pc2.onicecandidate = (event) => {
+                if (event.candidate) {
+                    pc1.addIceCandidate(event.candidate);
+                    console.log('**** pc1 got event candidate', event.candidate);
+                } else {
+                    console.log('i said let me go home... plz');
+                }
+            }
+
+            pc1.ontrack = (event) => {
+                console.warn('**** pc1 on track', event);
+            }
+
+            pc2.ontrack = (event) => {
+                console.warn('**** pc2 on track', event);
+                remoteStream.current.srcObject = event.streams[0]
+            }
+
+            console.log('**** pc1 createOffer start');
+            const offer = await pc1.createOffer();
+            console.log('**** pc1 setLocalDescription start');
+            await pc1.setLocalDescription(offer);
+
+            console.log('**** pc2 setRemoteDescription start');
+            await pc2.setRemoteDescription(offer);
+
+            console.log('**** pc2 createAnswer start ');
+            const answer = await pc2.createAnswer();
+            console.log('**** pc2 setLocalDescription start');
+            await pc2.setLocalDescription(answer);
+
+            console.log('**** pc1 setRemoteDescription start');
+            await pc1.setRemoteDescription(answer);
+
 
         } catch (error) {
             console.warn(error);
@@ -67,7 +115,7 @@ function WebrtcVideo(props) {
         <>
             <div>It's video page.</div>
             <div style={{width: '40%'}}>
-                <video ref={localStream} autoPlay controls/> 나여
+                <video ref={remoteStream} autoPlay controls/>
             </div>
 
         </>
