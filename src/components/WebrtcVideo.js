@@ -31,7 +31,7 @@ function WebrtcVideo(props) {
 
     },[]);
 
-    const getMedia = async () => {
+    const getMedia = async (pc) => {
         const constraints = window.constraints = {
             audio: true,
             video: true
@@ -39,7 +39,7 @@ function WebrtcVideo(props) {
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            stream.getTracks().forEach(track => pc1.addTrack(track, stream));
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
             localStream.current.srcObject = stream;
 
         } catch (error) {
@@ -59,7 +59,7 @@ function WebrtcVideo(props) {
             pc1 = await new RTCPeerConnection(configuration);
             pc2 = await new RTCPeerConnection(configuration);
 
-            await getMedia().then();
+            await getMedia(pc1).then();
 
             pc1.onicecandidate = (event) => {
                 if (event.candidate) {
@@ -114,7 +114,7 @@ function WebrtcVideo(props) {
     return (
         <>
             <div>It's video page.</div>
-            <div style={{width: '40%'}}>
+            <div style={{width: '50%'}}>
                 <video ref={remoteStream} autoPlay controls/>
             </div>
 
