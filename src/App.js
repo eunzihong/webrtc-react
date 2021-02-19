@@ -1,7 +1,8 @@
 import React from 'react';
 import {BrowserRouter as Router, Route, Switch} from "react-router-dom";
 import Main from "./pages/Main";
-import WebrtcVideo from "./components/WebrtcVideo";
+import WebrtcLocalConnection from "./components/WebrtcLocalConnection";
+import WebrtcRemoteConnection from "./components/WebrtcRemoteConnection";
 
 function App() {
   return (
@@ -9,7 +10,8 @@ function App() {
           <Router>
               <Switch>
                   {/*<Route exact path="/" component={Main} />*/}
-                  <Route exact path="/" component={WebrtcVideo} />
+                  <Route exact path="/local" component={WebrtcLocalConnection} />
+                  <Route exact path="/" component={WebrtcRemoteConnection} />
               </Switch>
           </Router>
       </div>

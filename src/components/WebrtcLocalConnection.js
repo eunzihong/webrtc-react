@@ -20,7 +20,7 @@ import React, {useState, useEffect, useRef} from "react";
 *       4-2. process opponent's media data
 * */
 
-function WebrtcVideo(props) {
+function WebrtcLocalConnection(props) {
     // let peerConnection;
     let pc1, pc2;
     const localStream = useRef(null);
@@ -123,4 +123,4 @@ function WebrtcVideo(props) {
 
 }
 
-export default WebrtcVideo;
+export default WebrtcLocalConnection;
