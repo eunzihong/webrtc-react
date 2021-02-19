@@ -11,6 +11,7 @@ import React, {useState, useEffect, useRef} from "react";
 
 function WebrtcRemoteConnection(props) {
     const myName = props.location.state.name;
+
     let stream;
     let peerConnection;
     let webSocket;
@@ -21,10 +22,17 @@ function WebrtcRemoteConnection(props) {
     const [targetName, setTargetName] = useState("");
     const [userList, setUserList] = useState("");
 
+
     useEffect(()=>{
         getPeerConnection().then();
 
     },[]);
+
+
+    const log = (text) => {
+        var time = new Date();
+        console.log("[" + time.toLocaleTimeString() + "] " + text);
+    }
 
 
     const getMedia = async () => {
@@ -37,6 +45,7 @@ function WebrtcRemoteConnection(props) {
             stream = await navigator.mediaDevices.getUserMedia(constraints);
             await stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
             localStream.current.srcObject = stream;
+            log("Media stream connected");
 
         } catch (error) {
             console.warn(error);
@@ -59,7 +68,6 @@ function WebrtcRemoteConnection(props) {
 
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    console.log('**** peerConnection on icecandidate');
                     const message = JSON.stringify({
                         type: "new-ice-candidate",
                         name: myName,
@@ -68,6 +76,7 @@ function WebrtcRemoteConnection(props) {
                     });
 
                     webSocket.send(message);
+                    log("icecandidate message sent to server");
 
                 } else {
                     console.log('let me go home...');
@@ -81,8 +90,6 @@ function WebrtcRemoteConnection(props) {
             };
 
             peerConnection.onnegotiationneeded = async () => {
-                console.log('**** peerConnection on negotiation');
-                console.log('**** peerConnection createOffer start');
                 let offer;
 
                 offer = await peerConnection.createOffer();
@@ -96,17 +103,18 @@ function WebrtcRemoteConnection(props) {
                 });
 
                 webSocket.send(message);
+                log("offer message sent to server");
 
             }
 
             peerConnection.ontrack = (event) => {
-                console.warn('**** peerConnection on track ', event);
                 remoteStream.current.srcObject = event.streams[0];
+                log("peer connection on track!");
             }
 
             peerConnection.onremovetrack = () => {
                 if (remoteStream.current.srcObject.getTracks().length === 0) {
-                    console.log('**** session closed');
+                    log("session closed");
                 }
             }
 
@@ -121,12 +129,12 @@ function WebrtcRemoteConnection(props) {
         webSocket = new WebSocket('ws://localhost:8080');
 
         webSocket.onopen = async () => {
-            console.log('**** socket connected');
             const message = JSON.stringify({
                 type: "greeting",
                 name: myName
             })
             webSocket.send(message);
+            log("say hello to signaling server :)");
 
         }
 
@@ -142,37 +150,35 @@ function WebrtcRemoteConnection(props) {
                     break;
 
                 case "new-ice-candidate":
-                    console.log('**** socket sent ice ', message.candidate);
                     try {
                         await peerConnection.addIceCandidate(message.candidate);
+                        log("new ice candidate added");
                     } catch(err) {
                         console.warn(err);
                     }
                     break;
 
                 case "video-offer":
-                    console.warn('**** socket sent offer ');
-                    const description = message.sdp;
+                    await peerConnection.setRemoteDescription(message.sdp);
 
-                    await peerConnection.setRemoteDescription(description);
+                    let answer;
+                    answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
 
-                    if (description.type === "offer") {
-                        let answer;
-                        answer = await peerConnection.createAnswer();
-                        await peerConnection.setLocalDescription(answer);
-                        const message = JSON.stringify({
-                            name: myName,
-                            target: targetName,
-                            type: "video-answer",
-                            sdp: peerConnection.localDescription
-                        });
-                        webSocket.send(message);
-                    }
+                    const msg = JSON.stringify({
+                        name: myName,
+                        target: targetName,
+                        type: "video-answer",
+                        sdp: peerConnection.localDescription
+                    });
+                    webSocket.send(msg);
+                    log("accept offer message and reply answer");
+
                     break;
 
                 case "video-answer":
-                    console.warn('**** socket sent answer');
                     await peerConnection.setRemoteDescription(message.sdp);
+                    log("accept answer message");
                     break;
             }
         }
@@ -184,19 +190,19 @@ function WebrtcRemoteConnection(props) {
             <div>It's video page.</div>
 
             <div style={{flexDirection: 'row'}}>
-                my name {myName}
+                my name: {myName}
             </div>
 
             <div style={{flexDirection: 'row'}}>
-                {"opponent's name "}
+                {"opponent's name: "}
                 <input value={targetName} onChange={(event) => setTargetName(event.target.value)}/>
             </div>
 
             <div>active user list: {userList}</div>
 
-            <div style={{width: '30%'}}>
-                <video ref={localStream} autoPlay controls />{myName}
-                <video ref={remoteStream} autoPlay controls />{targetName}
+            <div style={{width: '100%'}}>
+                <video ref={localStream} autoPlay controls style={{width: 200, margin: 10}} />
+                <video ref={remoteStream} autoPlay controls style={{width: 200, margin: 10}} />
             </div>
 
         </>
