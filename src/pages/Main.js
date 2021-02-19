@@ -1,10 +1,19 @@
-import React from 'react';
+import React, {useState} from 'react';
+import {Link} from "react-router-dom";
 
 function Main(props) {
+    const [myName, setMyName] = useState("");
     return (
         <>
             <div>
                 Hello World! It's Main page.
+                <input value={myName} onChange={(event) => setMyName(event.target.value)}/>
+                <Link to={{
+                    pathname:'/remote',
+                    state: {
+                        name: myName
+                    }
+                }}>next</Link>
             </div>
         </>
     );

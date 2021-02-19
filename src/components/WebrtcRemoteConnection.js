@@ -10,16 +10,21 @@ import React, {useState, useEffect, useRef} from "react";
 */
 
 function WebrtcRemoteConnection(props) {
+    const myName = props.location.state.name;
     let stream;
     let peerConnection;
     let webSocket;
+
+    let polite = false;
     let makingOffer;
+    let ignoreOffer;
 
     const localStream = useRef(null);
     const remoteStream = useRef(null);
 
-    const [myName, setMyName] = useState("");
+    // const [myName, setMyName] = useState("");
     const [targetName, setTargetName] = useState("");
+    // const targetName = myName==='eunz'?'geumz':'eunz';
     const [userList, setUserList] = useState("");
     const [sendOffer, setSendOffer] = useState(false);
 
@@ -56,14 +61,13 @@ function WebrtcRemoteConnection(props) {
         };
 
         try {
-            await getSocketConnection();
-
             peerConnection = await new RTCPeerConnection(configuration);
+            await getSocketConnection();
             await getMedia();
 
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    console.log('**** peerConnection on icecandidate ');
+                    console.log('**** peerConnection on icecandidate');
                     const message = JSON.stringify({
                         type: "new-ice-candidate",
                         name: myName,
@@ -78,11 +82,18 @@ function WebrtcRemoteConnection(props) {
                 }
             }
 
+            peerConnection.oniceconnectionstatechange = () => {
+                if (peerConnection.iceConnectionState === "failed") {
+                    peerConnection.restartIce();
+                }
+            };
+
             peerConnection.onnegotiationneeded = async (event) => {
-                console.log('**** peerConnection on negotiation');
+                console.log('**** peerConnection on negotiation ');
                 console.log('**** peerConnection createOffer start');
 
                 let offer;
+                makingOffer = true;
 
                 offer = await peerConnection.createOffer();
                 console.log('**** peerConnection setLocalDescription start');
@@ -134,31 +145,55 @@ function WebrtcRemoteConnection(props) {
         }
 
         webSocket.onmessage = async (event) => {
-            console.log('socket message: ', event.data);
             const message = JSON.parse(event.data);
+
             switch (message.type) {
                 case "greeting":
                     console.log('greeting');
                     break;
 
-                case "user-list":
-                    console.log('socket users: ',message.users);
-                    setUserList(message.users.join(", "));
-                    break;
-
                 case "new-ice-candidate":
-                    console.warn('**** socket sent ice ');
-                    await peerConnection.addIceCandidate(message.candidate);
+                    console.log('**** socket sent ice', message.candidate);
+                    try {
+                        await peerConnection.addIceCandidate(message.candidate);
+                    } catch(err) {
+                        if (!ignoreOffer) {
+                            throw err;
+                        }
+                    }
                     break;
 
                 case "video-offer":
                     console.warn('**** socket sent offer');
-                    await peerConnection.setRemoteDescription(message.sdp);
+                    const description = message.sdp;
+
+                    const offerCollision = (description.type === "offer") &&
+                        (makingOffer || peerConnection.signalingState !== "stable");
+
+                    ignoreOffer = !polite && offerCollision;
+                    if (myName==='geumz') {
+                        return;
+                    }
+
+                    await peerConnection.setRemoteDescription(description);
+
+                    if (description.type === "offer") {
+                        // let answer;
+                        // answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription();
+                        const message = JSON.stringify({
+                            name: myName,
+                            target: targetName,
+                            type: "video-answer",
+                            sdp: peerConnection.localDescription
+                        });
+                        webSocket.send(message);
+                    }
                     break;
 
                 case "video-answer":
-                    console.warn('**** socket sent answer');
                     await peerConnection.setRemoteDescription(message.sdp);
+                    console.warn('**** socket sent answer ');
                     break;
             }
         }
@@ -170,20 +205,15 @@ function WebrtcRemoteConnection(props) {
             <div>It's video page.</div>
 
             <div style={{flexDirection: 'row'}}>
-                {"my name"}
-                <input value={myName} onChange={(event) => setMyName(event.target.value)}/>
-                <button onClick={() => getMedia()}>display</button>
-                <button onClick={() => getSocketConnection()}>socket open</button>
-
+                my name {myName}
             </div>
 
             <div style={{flexDirection: 'row'}}>
                 {"opponent's name"}
                 <input value={targetName} onChange={(event) => setTargetName(event.target.value)}/>
-                <button onClick={() => getPeerConnection()}>call</button>
             </div>
 
-            <div>active user list: {userList}</div>
+            {/*<div>active user list: {userList}</div>*/}
 
             <div style={{width: '30%'}}>
                 <video ref={localStream} autoPlay controls />{myName}
