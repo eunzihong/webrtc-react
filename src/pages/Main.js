@@ -5,18 +5,16 @@ function Main(props) {
     const [myName, setMyName] = useState("");
     return (
         <>
+            <div>Hello World! It's Main page.</div>
             <div>
-                Hello World! It's Main page.
                 <input value={myName} onChange={(event) => setMyName(event.target.value)}/>
                 <Link to={{
                     pathname:'/remote',
-                    state: {
-                        name: myName
-                    }
+                    state: {name: myName}
                 }}>next</Link>
             </div>
         </>
     );
-}
+};
 
 export default Main;
