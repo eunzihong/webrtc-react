@@ -1,6 +1,6 @@
 import React, {useState, useEffect, useRef} from "react";
 
-function WebrtcSfuConnection(props) {
+function WebrtcSingleSfuConnection(props) {
     let stream;
     let peerConnection;
     let webSocket;
@@ -48,7 +48,7 @@ function WebrtcSfuConnection(props) {
         };
 
         try {
-            peerConnection = await new RTCPeerConnection(configuration);
+            peerConnection = new RTCPeerConnection(configuration);
             await getSocketConnection();
             await getMedia();
 
@@ -89,8 +89,9 @@ function WebrtcSfuConnection(props) {
             }
 
             peerConnection.ontrack = (event) => {
-                remoteStream.current.srcObject = event.streams[0];
-                log("peer connection on track!");
+                if(!remoteStream.current.srcObject){
+                    remoteStream.current.srcObject = event.streams[0];
+                }
             }
 
             peerConnection.onremovetrack = () => {
@@ -145,8 +146,8 @@ function WebrtcSfuConnection(props) {
         <>
             <div>Pion SFU page</div>
             <div style={{width: '100%'}}>
-                <video ref={localStream} autoPlay controls style={{width: 200, margin: 10}} />
-                <video ref={remoteStream} autoPlay controls style={{width: 200, margin: 10}} />
+                <video id="myVideo" ref={localStream} autoPlay style={{width: 200, margin: 10}} />
+                <video id="remoteVideo" ref={remoteStream} autoPlay style={{width: 200, margin: 10}} />
             </div>
 
         </>
@@ -154,4 +155,4 @@ function WebrtcSfuConnection(props) {
 
 }
 
-export default WebrtcSfuConnection;
+export default WebrtcSingleSfuConnection;

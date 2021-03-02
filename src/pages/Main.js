@@ -9,9 +9,9 @@ function Main(props) {
             <div>
                 <input value={myName} onChange={(event) => setMyName(event.target.value)}/>
                 <Link to={{
-                    pathname:'/remote',
+                    pathname:'/multi',
                     state: {name: myName}
-                }}>next</Link>
+                }}>multi SFU room enter</Link>
             </div>
         </>
     );
