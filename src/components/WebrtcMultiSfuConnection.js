@@ -7,9 +7,13 @@ function WebrtcMultiSfuConnection(props) {
     let webSocket;
     let senderPeer;
     var receiverPeers = [];
+    var acceptorPeers = [];
 
     const localStream = useRef(null);
-    const remoteStream = useRef(null);
+    const receiveStream1 = useRef(null);
+    const receiveStream2 = useRef(null);
+    const acceptStream1 = useRef(null);
+    const acceptStream2 = useRef(null);
 
     const configuration = {
         iceServers: [{
@@ -57,7 +61,8 @@ function WebrtcMultiSfuConnection(props) {
                 if (event.candidate) {
                     const message = JSON.stringify({
                         type: "new-ice-candidate",
-                        data: JSON.stringify(event.candidate)
+                        data: JSON.stringify(event.candidate),
+                        channel: "init"
                     });
 
                     webSocket.send(message);
@@ -89,7 +94,8 @@ function WebrtcMultiSfuConnection(props) {
 
                 const message = JSON.stringify({
                     type: "init-offer",
-                    data: JSON.stringify(offer)
+                    data: JSON.stringify(offer),
+                    channel: "init"
                 });
 
                 webSocket.send(message);
@@ -106,7 +112,7 @@ function WebrtcMultiSfuConnection(props) {
 
     }
 
-    const getReceiverConnection = async (peerConnection) => {
+    const getReceiverConnection = async (peerConnection, channel) => {
         try {
             peerConnection.addTransceiver('video');
 
@@ -114,7 +120,8 @@ function WebrtcMultiSfuConnection(props) {
                 if (event.candidate) {
                     const message = JSON.stringify({
                         type: "new-ice-candidate",
-                        data: JSON.stringify(event.candidate)
+                        data: JSON.stringify(event.candidate),
+                        channel: channel
                     });
 
                     webSocket.send(message);
@@ -133,7 +140,8 @@ function WebrtcMultiSfuConnection(props) {
 
                 const message = JSON.stringify({
                     type: "receiver-offer",
-                    data: JSON.stringify(offer)
+                    data: JSON.stringify(offer),
+                    channel: channel
                 });
 
                 webSocket.send(message);
@@ -141,15 +149,65 @@ function WebrtcMultiSfuConnection(props) {
             }
 
             peerConnection.ontrack = (event) => {
-                remoteStream.current.srcObject = event.streams[0];
+                if(!receiveStream1.current.srcObject) {
+                    receiveStream1.current.srcObject = event.streams[0];
+                } else {
+                    receiveStream2.current.srcObject = event.streams[0];
+                }
                 log("peer connection on track!");
             }
 
-            peerConnection.onremovetrack = () => {
-                if (remoteStream.current.srcObject.getTracks().length === 0) {
-                    log("session closed");
+
+        } catch (error) {
+            console.warn(error);
+        }
+    }
+
+    const getAcceptorConnection = async (peerConnection, channel) => {
+        try {
+            peerConnection.addTransceiver('video');
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    const message = JSON.stringify({
+                        type: "new-ice-candidate",
+                        data: JSON.stringify(event.candidate),
+                        channel: channel
+                    });
+
+                    webSocket.send(message);
+                    log("icecandidate message sent to server ");
+
+                } else {
+                    console.log('give me coffee with an extra shot...');
                 }
             }
+
+            peerConnection.onnegotiationneeded = async () => {
+                let offer;
+
+                offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                const message = JSON.stringify({
+                    type: "acceptor-offer",
+                    data: JSON.stringify(offer),
+                    channel: channel
+                });
+
+                webSocket.send(message);
+                log("receiver offer sent");
+            }
+
+            peerConnection.ontrack = (event) => {
+                if(!acceptStream1.current.srcObject) {
+                    acceptStream1.current.srcObject = event.streams[0];
+                } else {
+                    acceptStream2.current.srcObject = event.streams[0];
+                }
+                log("peer connection on track!");
+            }
+
 
         } catch (error) {
             console.warn(error);
@@ -195,21 +253,40 @@ function WebrtcMultiSfuConnection(props) {
                     break;
 
                 case "new-receiver-greeting":
-                    log("new receiver connection for " + message.data + " is required");
+                    log("new receiver greeting:" + message.channel);
                     var newReceiverPeer = new RTCPeerConnection(configuration);
-                    getReceiverConnection(newReceiverPeer)
+                    getReceiverConnection(newReceiverPeer, message.channel)
                         .then(() => {
-                            receiverPeers.push({id: message.data, receiver: newReceiverPeer})
+                            receiverPeers.push({id: message.data, receiver: newReceiverPeer, channel: message.channel});
                             log("receiver connection for " + message.data + " is established");
                         });
                     break;
 
                 case "receiver-answer":
-                    const id = message.type.split("|")[1];
+                    var receiverId = message.type.split("|")[1];
 
-                    var receiverPeer = receiverPeers.find(elem => elem.id === id).receiver;
+                    var receiverPeer = receiverPeers.find(elem => elem.id === receiverId).receiver;
 
                     await receiverPeer.setRemoteDescription(message.data);
+                    log("receiver accept answer message");
+                    break;
+
+                case "new-acceptor-greeting":
+                    log("new acceptor greeting:" + message.channel);
+                    var newAcceptorPeer = new RTCPeerConnection(configuration);
+                    getAcceptorConnection(newAcceptorPeer, message.channel)
+                        .then(() => {
+                            acceptorPeers.push({id: message.data, acceptor: newAcceptorPeer, channel: message.channel});
+                            log("acceptor connection for " + message.data + " is established");
+                        });
+                    break;
+
+                case "acceptor-answer":
+                    var acceptorId = message.type.split("|")[1];
+
+                    var acceptorPeer = acceptorPeers.find(elem => elem.id === acceptorId).acceptor;
+
+                    await acceptorPeer.setRemoteDescription(message.data);
                     log("receiver accept answer message");
                     break;
             }
@@ -221,8 +298,16 @@ function WebrtcMultiSfuConnection(props) {
         <>
             <div>Pion SFU page</div>
             <div style={{width: '100%'}}>
+                {myName}
                 <video id="myVideo" ref={localStream} autoPlay controls style={{width: 200, margin: 10}} />
-                <video id="remoteVideo" ref={remoteStream} autoPlay controls style={{width: 200, margin: 10}} />
+                receiver1
+                < video id="receiveVideo1" ref={receiveStream1} autoPlay controls style={{width: 200, margin: 10}} />
+                receiver2
+                <video id="receiveVideo2" ref={receiveStream2} autoPlay controls style={{width: 200, margin: 10}} />
+                acceptor1
+                <video id="acceptVideo1" ref={acceptStream1} autoPlay controls style={{width: 200, margin: 10}} />
+                acceptor2
+                <video id="acceptVideo2" ref={acceptStream2} autoPlay controls style={{width: 200, margin: 10}} />
             </div>
 
         </>
